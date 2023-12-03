@@ -1,5 +1,5 @@
 import socket
-from datetime import datetime
+import time
 
 # total packet size
 PACKET_SIZE = 1024
@@ -9,7 +9,7 @@ SEQ_ID_SIZE = 4
 MESSAGE_SIZE = PACKET_SIZE - SEQ_ID_SIZE
 
 # read data
-with open("send.txt", "rb") as f:
+with open("file.mp3", "rb") as f:
     data = f.read()
 
 # create a udp socket
@@ -58,7 +58,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
                     seq_id, SEQ_ID_SIZE, signed=True, byteorder="big"
                 )
                 udp_socket.sendto(empty_message, ("localhost", 5001))
-                print("sent empty message", seq_id)
+                print("sent empty message", ack_id, seq_id)
 
                 # Wait for acknowledgement and fin message
                 while True:
@@ -68,13 +68,20 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
 
                         # If ack id == sequence id and fin message received, move on
                         if ack_id == seq_id + 3 and ack[SEQ_ID_SIZE:] == b"fin":
-                            print("ack id == seq id + 4")
+                            print(ack_id, ack[SEQ_ID_SIZE:], seq_id)
                             # Send a message with body '==FINACK==' to let receiver know to exit
-                            fin_ack_message = b"==FINACK=="
-                            udp_socket.sendto(fin_ack_message, ("localhost", 5001))
+                            message = (
+                                int.to_bytes(
+                                    seq_id, SEQ_ID_SIZE, signed=True, byteorder="big"
+                                )
+                                + b"==FINACK=="
+                            )
+                            udp_socket.sendto(message, ("localhost", 5001))
                             break
 
                     except socket.timeout:
                         print("timeout, resending empty message")
                         print(ack_id, ack[SEQ_ID_SIZE:], seq_id, len(data))
                         udp_socket.sendto(empty_message, ("localhost", 5001))
+
+                break
