@@ -28,7 +28,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
     packet_end_times = {}
     # start sending data from 0th sequence
     seq_id = 0
-    while seq_id < len(data):
+    while (True):
         
         # create messages
         messages = []
