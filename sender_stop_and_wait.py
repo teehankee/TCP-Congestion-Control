@@ -87,7 +87,12 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
     end_time = time.time()
     time_elapsed = end_time - start_time
 
-    avg_delay = sum(packet_end_times.values()) / len(packet_end_times)
+    avg_delay = 0
+    for k in packet_end_times.keys():
+        packet_delay = packet_end_times[k] - packet_start_times[k]
+        avg_delay += packet_delay
+
+    avg_delay /= len(packet_end_times.keys())
     metric = sys.getsizeof(data) / (avg_delay * time_elapsed)
     print(
         "{:.2f},{:.2f},{:.2f}".format(
