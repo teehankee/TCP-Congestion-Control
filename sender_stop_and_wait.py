@@ -1,6 +1,7 @@
 import sys
 import time
 import socket
+import struct
 
 # total packet size
 PACKET_SIZE = 1024
@@ -32,18 +33,11 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
         seq_id_tmp = seq_id
 
         # construct message
-        # sequence id of length SEQ_ID_SIZE + message of remaining PACKET_SIZE - SEQ_ID_SIZE bytes
         message_data = data[seq_id_tmp : seq_id_tmp + MESSAGE_SIZE]
-        # check if not last message
-        if len(message_data) == 0:
-            message = int.to_bytes(
-                seq_id_tmp, SEQ_ID_SIZE, byteorder="big", signed=True
-            )
-        else:
-            message = (
-                int.to_bytes(seq_id_tmp, SEQ_ID_SIZE, byteorder="big", signed=True)
-                + message_data
-            )
+        message = bytearray(struct.pack(">I", seq_id_tmp))
+        if len(message_data) != 0:
+            message.extend(message_data)
+
         # create ack
         acks[seq_id_tmp] = False
         # move seq_id tmp pointer ahead
@@ -54,64 +48,46 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
         # send message out
         for k in acks.keys():
             packet_start_times[k] = time.time()
-        # print('sending', sid)
         udp_socket.sendto(message, ("localhost", 5001))
 
         # wait for acknowledgement
         while True:
             try:
-                # print(acks)
-                # wait for ack
                 ack, _ = udp_socket.recvfrom(PACKET_SIZE)
-
-                # extract ack id
-                ack_id = int.from_bytes(ack[:SEQ_ID_SIZE], byteorder="big")
+                ack_id = struct.unpack(">I", ack[:SEQ_ID_SIZE])[0]
                 ack_message = ack[SEQ_ID_SIZE:]
 
-                if ack_message == "fin":
+                if ack_message == b"fin":
                     break
 
-                # update acks below cumulative ack
                 for _id in acks:
                     if _id < ack_id:
                         acks[_id] = True
                         if _id not in packet_end_times:
                             packet_end_times[_id] = time.time()
+                            # print("ack", _id, "received")
 
                 ACKS[ack_id] = ACKS.get(ack_id, 0) + 1
 
-                # print("received", ack_id)
-
-                # all acks received, move on
                 if all(acks.values()):
                     break
             except socket.timeout:
-                # no ack received, resend last message
                 udp_socket.sendto(message, ("localhost", 5001))
 
-        # move sequence id forward
         seq_id = seq_id_tmp
 
-    # send final closing message
-
-    finack = (
-        int.to_bytes(seq_id, SEQ_ID_SIZE, byteorder="big", signed=True) + b"==FINACK=="
-    )
+    finack = bytearray(struct.pack(">I", seq_id))
+    finack.extend(b"==FINACK==")
     try:
         udp_socket.sendto(finack, ("localhost", 5001))
         ack, _ = udp_socket.recvfrom(PACKET_SIZE)
-    except:
+    except socket.timeout:
         pass
 
     end_time = time.time()
     time_elapsed = end_time - start_time
 
-    avg_delay = 0
-    for k in packet_end_times.keys():
-        packet_delay = packet_end_times[k] - packet_start_times[k]
-        avg_delay += packet_delay
-
-    avg_delay /= len(packet_end_times.keys())
+    avg_delay = sum(packet_end_times.values()) / len(packet_end_times)
     metric = sys.getsizeof(data) / (avg_delay * time_elapsed)
     print(
         "{:.2f},{:.2f},{:.2f}".format(
@@ -120,6 +96,3 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
     )
     # minutes, seconds = divmod(time_elapsed, 60)
     # print("Time elapsed: {:.0f} minutes {:.2f} seconds".format(minutes, seconds))
-    udp_socket.sendto(
-        int.to_bytes(seq_id, 4, signed=True, byteorder="big"), ("localhost", 5001)
-    )
