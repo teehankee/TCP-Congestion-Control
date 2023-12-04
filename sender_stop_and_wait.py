@@ -28,14 +28,30 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
             + data[seq_id : seq_id + MESSAGE_SIZE]
         )
 
+        # Initialize variables
+        total_bytes_sent = 0
+        start_time = time.time()
+        total_delay = 0
+        num_packets = 0
+
         # wait for acknowledgement
         while True:
             try:
-                # send message out
-                udp_socket.sendto(message, ("localhost", 5001))
+                # record send time
+                send_time = time.time()
 
-                # wait for ack
+                # send message out and receive acknoledgement
+                udp_socket.sendto(message, ("localhost", 5001))
                 ack, _ = udp_socket.recvfrom(PACKET_SIZE)
+
+                # record receive time of acknoledgement
+                ack_time = time.time()
+                delay = ack_time - send_time
+
+                # update variables
+                total_bytes_sent += len(message)
+                total_delay += delay
+                num_packets += 1
 
                 # extract ack id
                 ack_id = int.from_bytes(ack[:SEQ_ID_SIZE], byteorder="big")
@@ -48,19 +64,18 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
                 # no ack, resend message
                 udp_socket.sendto(message, ("localhost", 5001))
 
-            # move sequence id forward
-            seq_id += MESSAGE_SIZE
-            print(ack_id, ack[SEQ_ID_SIZE:], seq_id)
-            if seq_id >= len(data):
+                # move sequence id forward
+
+            if seq_id + MESSAGE_SIZE >= len(data):
                 seq_id = len(data)
                 # Send an empty message with the correct sequence id
                 empty_message = int.to_bytes(
                     seq_id, SEQ_ID_SIZE, signed=True, byteorder="big"
                 )
                 udp_socket.sendto(empty_message, ("localhost", 5001))
-                print("sent empty message", ack_id, seq_id)
 
                 # Wait for acknowledgement and fin message
+
                 while True:
                     try:
                         ack, _ = udp_socket.recvfrom(PACKET_SIZE)
@@ -68,7 +83,6 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
 
                         # If ack id == sequence id and fin message received, move on
                         if ack_id == seq_id + 3 and ack[SEQ_ID_SIZE:] == b"fin":
-                            print(ack_id, ack[SEQ_ID_SIZE:], seq_id)
                             # Send a message with body '==FINACK==' to let receiver know to exit
                             message = (
                                 int.to_bytes(
@@ -85,3 +99,15 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
                         udp_socket.sendto(empty_message, ("localhost", 5001))
 
                 break
+
+            else:
+                seq_id += MESSAGE_SIZE
+
+end_time = time.time()
+total_time = end_time - start_time
+throughput = total_bytes_sent / total_time
+average_packet_delay = total_delay / num_packets
+performance_metric = throughput / average_packet_delay
+
+# Print the results
+print(f"{throughput:.2f},{average_packet_delay:.2f},{performance_metric:.2f}")
