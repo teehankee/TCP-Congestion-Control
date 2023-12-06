@@ -28,6 +28,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
     udp_socket.settimeout(1)
 
     start_time = time.time()
+    start_times = {}
     packet_start_times = {}
     packet_end_times = {}
     # start sending data from 0th sequence
@@ -70,6 +71,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
         for sid, message in messages:
             for k in acks.keys():
                 packet_start_times[k] = time.time()
+                start_times[k] = time.time()
             # print('sending', sid)
             udp_socket.sendto(message, ("localhost", 5001))
 
@@ -122,7 +124,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
                 else:
                     first_zero_instance = min(i for i, x in acks.items() if x == 0)
                     internal_timeout = (
-                        time.time() - packet_start_times[first_zero_instance]
+                        time.time() - start_times[first_zero_instance]
                     )
                     if internal_timeout > 1:
                         print("timeout " + str(internal_timeout) + "\n")
@@ -136,7 +138,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
                         if not acks.get(sid, False):
                             print("sending %r", sid)
                             udp_socket.sendto(message, ("localhost", 5001))
-                            packet_start_times[sid] = time.time()
+                            start_times[sid] = time.time()
 
                     ssthresh = cwnd // 2
 

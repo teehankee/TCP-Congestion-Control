@@ -29,6 +29,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
 
     start_time = time.time()
     packet_start_times = {}
+    start_times = {}
     packet_end_times = {}
     # start sending data from 0th sequence
     seq_id = 0
@@ -70,6 +71,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
         for sid, message in messages:
             for k in acks.keys():
                 packet_start_times[k] = time.time()
+                start_times[k] = time.time()
             # print('sending', sid)
             udp_socket.sendto(message, ("localhost", 5001))
 
@@ -95,7 +97,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
                             packet_end_times[_id] = time.time()
 
                     # triple duplicate acks
-                    else:
+                    elif _id == ack_id:
                         dup_ack += 1
                         if dup_ack == 3:
                             dup_ack_reset = True
@@ -121,9 +123,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
                     break
                 else:
                     first_zero_instance = min(i for i, x in acks.items() if x == 0)
-                    internal_timeout = (
-                        time.time() - packet_start_times[first_zero_instance]
-                    )
+                    internal_timeout = time.time() - start_times[first_zero_instance]
                     if internal_timeout > 1:
                         print("timeout " + str(internal_timeout) + "\n")
                         timeout_reset = True
@@ -136,7 +136,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
                         if not acks.get(sid, False):
                             print("sending %r", sid)
                             udp_socket.sendto(message, ("localhost", 5001))
-                            packet_start_times[sid] = time.time()
+                            start_times[sid] = time.time()
 
                     ssthresh = cwnd // 2
                     cwnd = 1
