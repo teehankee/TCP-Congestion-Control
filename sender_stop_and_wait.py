@@ -90,7 +90,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
 
     avg_delay = 0
     for k in packet_end_times.keys():
-        packet_delay = packet_end_times[k] - start_times[k]
+        packet_delay = packet_end_times[k] - packet_start_times[k]
         avg_delay += packet_delay
 
     avg_delay /= len(packet_end_times.keys())
