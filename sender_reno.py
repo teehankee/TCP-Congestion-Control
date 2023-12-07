@@ -17,7 +17,6 @@ received_acks = []
 window_sizes = []
 times = []
 start_time = time.time()
-phases = []
 triple_dup_count = 0
 timeout_count = 0
 # read data
@@ -42,9 +41,12 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
     dup_ack_cwnd = []
     triple_dup_ack_ids = []
     # window size
+    first_packet_send_time = None
+    first_packet_receive_time = None
     cwnd = 1
     timeout = 0.5
     compare_data = []
+    phases = []
     while seq_id < len(data):
         # window_sizes.append(cwnd)
         # times.append(time.time() - start_time)
@@ -93,29 +95,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
                 # extract ack id
                 ack_id = int.from_bytes(ack[:SEQ_ID_SIZE], byteorder="big")
                 ack_message = ack[SEQ_ID_SIZE:]
-
-                # increment the count for each ack_id and check if it has reached 3
                 ack_counts[ack_id] = ack_counts.get(ack_id, 0) + 1
-
-                if ack_counts[ack_id] == 4:
-                    triple_dup_ack_ids.append(ack_id)
-
-                    # --message_data = data[ack_id : ack_id + MESSAGE_SIZE]
-                    for sid, message in messages:
-                        # if not acks[sid]:
-                        if not acks.get(sid, False):
-                            ssthresh = max(cwnd // 2, 1)
-                            cwnd = ssthresh
-                            triple_dup_count += 1
-                            phases.append("dup_ack_reset")
-                            window_sizes.append(cwnd)
-                            # --udp_socket.sendto(message_data, ("localhost", 5001))
-                            udp_socket.sendto(message, ("localhost", 5001))
-                            start_times[sid] = time.time()
-                            # ack_counts[ack_id] = 1
-                            print(f"Resent ack_id {ack_id}")
-                            break
-
                 if ack_message == "fin":
                     break
 
@@ -127,44 +107,41 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
                             packet_end_times[_id] = time.time()
                             timeout = 0.5
                         # print("received", ack_id)
-
-                # all acks received, increase window size
-                if all(acks.values()):
+                if not all(acks.values()):
+                    first_zero_instance = min(i for i, x in acks.items() if x == 0)
+                    internal_timeout = time.time() - start_times[first_zero_instance]
+                    if ack_counts[ack_id] == 4:
+                        ssthresh = max(cwnd // 2, 1)
+                        cwnd = ssthresh
+                        triple_dup_count += 1
+                        dup_ack_reset = True
+                        seq_id = first_zero_instance
+                        break
+                    if internal_timeout > timeout:
+                        for sid, message in messages:
+                            if sid == first_zero_instance:
+                                message_to_send = message
+                        ssthresh = max(cwnd // 2, 1)
+                        cwnd = 1
+                        timeout_count += 1
+                        timeout += timeout
+                        timeout_reset = True
+                        seq_id = first_zero_instance
+                        break
+                else:
                     # slow start
                     if cwnd < ssthresh:
                         cwnd += cwnd
-                        phases.append("slow start")
-                        window_sizes.append(cwnd)
-                    # congestion avoidance
                     else:
                         cwnd += 1
-                        phases.append("congestion avoidance")
-                        window_sizes.append(cwnd)
                     break
-                else:
-                    for sid, message in messages:
-                        # if not acks[sid]:
-                        if not acks.get(sid, False):
-                            internal_timeout = time.time() - start_times[sid]
-                            if internal_timeout > timeout:
-                                udp_socket.sendto(message, ("localhost", 5001))
-                                start_times[sid] = time.time()
-                                print("timeout at " + str(sid))
-                                print("timeout " + str(internal_timeout))
-                                print(str(timeout))
-                                ssthresh = max(cwnd // 2, 1)
-                                cwnd = 1
-                                timeout_count += 1
-                                phases.append("timeout_reset")
-                                window_sizes.append(cwnd)
-                                timeout += timeout
-                            break
             except socket.timeout:
                 pass
-
-        # move sequence id forward
-        seq_id = seq_id_tmp
-
+        if timeout_reset or dup_ack_reset:
+            dup_ack_reset = False
+            timeout_reset = False
+        else:
+            seq_id = seq_id_tmp
     # send final closing message
 
     finack = (
@@ -176,7 +153,6 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
     except:
         pass
 
-    print("here")
     end_time = time.time()
     time_elapsed = end_time - start_time
 
@@ -187,58 +163,10 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
 
     avg_delay /= len(packet_end_times.keys())
     metric = sys.getsizeof(data) / (avg_delay * time_elapsed)
+
     print("throughput ")
     print(sys.getsizeof(data) / time_elapsed)
     print("avg delay")
     print(avg_delay)
     print("metric")
     print(metric)
-    print("time elapsed")
-    print(time_elapsed)
-    print("triple dup count")
-    print(triple_dup_count)
-    print("timeout count")
-    print(timeout_count)
-    print("elapsed time")
-    print(str(time_elapsed // 60) + " min " + str(time_elapsed % 60) + " sec")
-print(window_sizes)
-print(dup_ack_cwnd)
-
-plt.plot(window_sizes)
-
-plt.xlabel("Time")
-plt.ylabel("Window Size")
-plt.title("Window Size Over Time")
-
-# slow_start_indices = [i for i, p in enumerate(phases) if p == "slow start"]
-# slow_start_sizes = [window_sizes[i] for i in slow_start_indices]
-# plt.scatter(slow_start_indices, slow_start_sizes, color="g", label="Slow Start")
-
-# congestion_avoidance_indices = [
-#     i for i, p in enumerate(phases) if p == "congestion avoidance"
-# ]
-# congestion_avoidance_sizes = [window_sizes[i] for i in congestion_avoidance_indices]
-# plt.scatter(
-#     congestion_avoidance_indices,
-#     congestion_avoidance_sizes,
-#     color="r",
-#     label="Congestion Avoidance",
-# )
-
-# dup_ack_reset_indices = [i for i, p in enumerate(phases) if p == "dup_ack_reset"]
-# dup_ack_reset_sizes = [window_sizes[i] for i in dup_ack_reset_indices]
-# plt.scatter(
-#     dup_ack_reset_indices, dup_ack_reset_sizes, color="y", label="Dup Ack Reset"
-# )
-
-# timeout_reset_indices = [i for i, p in enumerate(phases) if p == "timeout_reset"]
-# timeout_reset_sizes = [window_sizes[i] for i in timeout_reset_indices]
-# plt.scatter(
-#     timeout_reset_indices, timeout_reset_sizes, color="m", label="Timeout Reset"
-# )
-print("triple dup ack ids: ", triple_dup_ack_ids)
-print("received acks: ", received_acks)
-print("caught triple dup acks: ", caught_triple_dup_acks)
-plt.legend()
-plt.show()
-plt.savefig("window_size.png")
