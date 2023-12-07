@@ -48,8 +48,6 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
     compare_data = []
     phases = []
     while seq_id < len(data):
-        # window_sizes.append(cwnd)
-        # times.append(time.time() - start_time)
         # create messages
         messages = []
         acks = {}
@@ -81,14 +79,12 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
             for k in acks.keys():
                 packet_start_times[k] = time.time()
                 start_times[k] = time.time()
-            # print('sending', sid)
             udp_socket.sendto(message, ("localhost", 5001))
 
         prev_ack_id = -1
         # wait for acknowledgement
         while True:
             try:
-                # print(acks)
                 # wait for ack
                 ack, _ = udp_socket.recvfrom(PACKET_SIZE)
 
@@ -106,7 +102,6 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
                         if _id not in packet_end_times:
                             packet_end_times[_id] = time.time()
                             timeout = 0.5
-                        # print("received", ack_id)
                 if not all(acks.values()):
                     first_zero_instance = min(i for i, x in acks.items() if x == 0)
                     internal_timeout = time.time() - start_times[first_zero_instance]
@@ -164,9 +159,6 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
     avg_delay /= len(packet_end_times.keys())
     metric = sys.getsizeof(data) / (avg_delay * time_elapsed)
 
-    print("throughput ")
-    print(sys.getsizeof(data) / time_elapsed)
-    print("avg delay")
-    print(avg_delay)
-    print("metric")
-    print(metric)
+    print(str(round(sys.getsizeof(data) / time_elapsed, 2)) + ",")
+    print(str(round(avg_delay, 2)) + ",")
+    print(str(round(metric, 2)))

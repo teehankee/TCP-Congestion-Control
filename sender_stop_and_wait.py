@@ -66,7 +66,6 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
                         acks[_id] = True
                         if _id not in packet_end_times:
                             packet_end_times[_id] = time.time()
-                            # print("ack", _id, "received")
 
                 ACKS[ack_id] = ACKS.get(ack_id, 0) + 1
 
@@ -95,10 +94,6 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
 
     avg_delay /= len(packet_end_times.keys())
     metric = sys.getsizeof(data) / (avg_delay * time_elapsed)
-    print(
-        "{:.2f},{:.2f},{:.2f}".format(
-            sys.getsizeof(data) / time_elapsed, avg_delay, metric
-        )
-    )
-    minutes, seconds = divmod(time_elapsed, 60)
-    print("Time elapsed: {:.0f} minutes {:.2f} seconds".format(minutes, seconds))
+    print(str(round(sys.getsizeof(data) / time_elapsed, 2)) + ",")
+    print(str(round(avg_delay, 2)) + ",")
+    print(str(round(metric, 2)))
